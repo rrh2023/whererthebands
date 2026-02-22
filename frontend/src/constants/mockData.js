@@ -1,0 +1,48 @@
+const MOCK_CONCERTS = [
+  {
+    id: 1,
+    name: "Khruangbin",
+    venue: "Brooklyn Steel",
+    date: "Mar 14",
+    genre: "Psychedelic",
+    match: 9.4,
+    image: "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&q=80",
+    explanation: "Their hazy, bass-driven sound matches your love of atmospheric Indie and Electronic perfectly. This intimate venue means you'll feel every note.",
+    tags: ["late night energy", "bass-forward", "intimate"],
+  },
+  {
+    id: 2,
+    name: "Floating Points",
+    venue: "Elsewhere Hall",
+    date: "Mar 21",
+    genre: "Electronic",
+    match: 9.1,
+    image: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400&q=80",
+    explanation: "A perfect electronic set with jazz-influenced structures — exactly the crossover your taste profile calls for. Expect euphoric build-ups.",
+    tags: ["euphoric", "jazz-tinged", "headphones vibe"],
+  },
+  {
+    id: 3,
+    name: "Alvvays",
+    venue: "Music Hall of Williamsburg",
+    date: "Apr 2",
+    genre: "Indie Rock",
+    match: 8.7,
+    image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400&q=80",
+    explanation: "Dreamy guitar pop that sits squarely in your wheelhouse. The reverb-drenched melodies will hit hard in a small, packed room.",
+    tags: ["dream pop", "guitar-driven", "crowd sing-along"],
+  },
+  {
+    id: 4,
+    name: "Snarky Puppy",
+    venue: "Brooklyn Bowl",
+    date: "Apr 9",
+    genre: "Jazz Fusion",
+    match: 8.2,
+    image: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&q=80",
+    explanation: "World-class musicianship with groove-heavy arrangements. If you like Jazz and Electronic fusion, this is unmissable.",
+    tags: ["high energy", "musicians' musician", "groovy"],
+  },
+];
+
+export {MOCK_CONCERTS}
