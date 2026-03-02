@@ -1,0 +1,29 @@
+**/.env
+.env
+
+.aws-sam/
+
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.venv/
+venv/
+env/
+
+**/site-packages/
+
+# macOS
+.DS_Store
+
+.aws/
+credentials
+
+# .gitignore
+venv/
+.env
+.env.local
+__pycache__/
+.aws-sam/

@@ -1,0 +1,12 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "whereRTheBands-dev"
+resolve_s3 = true
+s3_prefix = "whereRTheBands-dev"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=\"dev\" CognitoUserPoolId=\"us-east-2_I2f6C9kly\" AllowedOrigin=\"*\""
+image_repositories = []
+
+[default.global.parameters]
+region = "us-east-1"

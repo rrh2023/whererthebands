@@ -1,0 +1,249 @@
+# backend/template.yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: WhereRTheBands? — Serverless backend (API Gateway + Lambda + DynamoDB)
+
+# ── Parameters (override per environment) ─────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  CognitoUserPoolId:
+    Type: String
+
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+
+  TicketmasterApiKey:
+    Type: String
+    NoEcho: true
+
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+
+# ── Globals apply to all Lambda functions ─────────────────────────────────
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Architectures: [arm64]   # Graviton2 — cheaper + faster for I/O-bound work
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        ALLOWED_ORIGIN: !Ref AllowedOrigin
+        USERS_TABLE: !Sub "whereRTheBands-users-${Environment}"
+    Layers:
+      - !Ref DependenciesLayer
+
+# ── Resources ─────────────────────────────────────────────────────────────
+Resources:
+
+  # ── Shared dependencies layer (requests, anthropic) ──────────────────────
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub "whereRTheBands-deps-${Environment}"
+      ContentUri: layer/
+      CompatibleRuntimes: [python3.12]
+      CompatibleArchitectures: [arm64]
+    Metadata:
+      BuildMethod: python3.12
+
+  # ── API Gateway ──────────────────────────────────────────────────────────
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "whereRTheBands-api-${Environment}"
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+        AllowHeaders: "'Authorization,Content-Type'"
+        AllowOrigin: !Sub "'${AllowedOrigin}'"
+        MaxAge: "'86400'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Sub "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}"
+
+  # ── DynamoDB Table ───────────────────────────────────────────────────────
+  UsersTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain   # Don't delete user data on stack teardown
+    Properties:
+      TableName: !Sub "whereRTheBands-users-${Environment}"
+      BillingMode: PAY_PER_REQUEST   # On-demand — no capacity planning needed
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: whereRTheBands
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ── IAM Role shared by Lambdas that touch DynamoDB ───────────────────────
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource: !GetAtt UsersTable.Arn
+
+  # ── Lambda: get_events ───────────────────────────────────────────────────
+  GetEventsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "whereRTheBands-get-events-${Environment}"
+      CodeUri: functions/get_events/
+      Handler: handler.handler
+      Description: Fetch upcoming concerts from Ticketmaster
+      Environment:
+        Variables:
+          TICKETMASTER_API_KEY: !Ref TicketmasterApiKey
+      Events:
+        PostEvents:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /events
+            Method: POST
+        OptionsEvents:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /events
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+
+  # ── Lambda: get_recommendations ──────────────────────────────────────────
+  GetRecommendationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "whereRTheBands-get-recs-${Environment}"
+      CodeUri: functions/get_recommendations/
+      Handler: handler.handler
+      Description: Generate personalized show picks with Claude
+      Timeout: 60   # Claude can take a moment
+      MemorySize: 512
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+      Events:
+        PostRecs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recommendations
+            Method: POST
+        OptionsRecs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /recommendations
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+
+  # ── Lambda: user_profile ─────────────────────────────────────────────────
+  UserProfileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "whereRTheBands-user-profile-${Environment}"
+      CodeUri: functions/user_profile/
+      Handler: handler.handler
+      Description: CRUD for user preferences and saved shows
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Events:
+        GetProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile
+            Method: GET
+        PutProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile
+            Method: PUT
+        PatchProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile
+            Method: PATCH
+        SaveShow:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile/saved
+            Method: POST
+        UnsaveShow:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile/saved/{eventId}
+            Method: DELETE
+        OptionsProfile:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Path: /profile
+            Method: OPTIONS
+            Auth:
+              Authorizer: NONE
+
+# ── Outputs (printed after deploy) ────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: API Gateway base URL — paste this into your frontend .env.local
+    Value: !Sub "https://${Api}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "whereRTheBands-api-url-${Environment}"
+
+  UsersTableName:
+    Value: !Ref UsersTable
+    Export:
+      Name: !Sub "whereRTheBands-users-table-${Environment}"
+
+  GetEventsFunctionArn:
+    Value: !GetAtt GetEventsFunction.Arn
+
+  GetRecommendationsFunctionArn:
+    Value: !GetAtt GetRecommendationsFunction.Arn
+
+  UserProfileFunctionArn:
+    Value: !GetAtt UserProfileFunction.Arn

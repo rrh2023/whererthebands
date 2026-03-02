@@ -1,88 +1,289 @@
-import { useState } from 'react';
+// src/components/Dashboard/ConcertCard.jsx
+import { useState } from "react";
 
-const ConcertCard = ({ concert, index }) => {
+export default function ConcertCard({ event, recommendation, index }) {
+  const [flipped, setFlipped] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+
+  if (!event || !event.date) return null;
+
+  const score = recommendation?.match_score ?? null;
+  const scoreColor =
+    score >= 9 ? "var(--cyan)" : score >= 7 ? "var(--gold)" : "var(--muted)";
+
+  const vibeTags = recommendation?.vibe_tags ?? [];
+  const explanation = recommendation?.explanation ?? null;
+
+  const dateObj = event.date ? new Date(event.date + "T00:00:00") : null;
+  const month = dateObj
+    ? dateObj.toLocaleString("en-US", { month: "short" }).toUpperCase()
+    : "—";
+  const day = dateObj ? dateObj.getDate() : "—";
+  const weekday = dateObj
+    ? dateObj.toLocaleString("en-US", { weekday: "short" }).toUpperCase()
+    : "";
 
   return (
     <div
-      className="relative overflow-hidden rounded-lg transition-all cursor-pointer group"
       style={{
-        background:"#111",
-        border:"1px solid #1e1e1e",
-        animation:`fadeUp 0.5s ease forwards`,
-        animationDelay:`${index * 0.1}s`,
-        opacity:0,
+        animationDelay: `${index * 80}ms`,
+        perspective: "1000px",
       }}
-      onClick={() => setExpanded(e => !e)}
+      className="animate-fadeUp"
     >
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}`}</style>
-
-      {/* Top: image + core info */}
-      <div className="flex gap-0">
-        <div className="relative w-28 h-28 flex-shrink-0">
-          <img src={concert.image} alt={concert.name} className="w-full h-full object-cover" style={{filter:"brightness(0.7)"}}/>
-          <div className="absolute inset-0 transition-opacity group-hover:opacity-0" style={{background:"linear-gradient(to right, transparent 60%, #111)"}}/>
-        </div>
-
-        <div className="flex-1 p-4 pr-3">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="font-black text-white leading-tight" style={{fontFamily:"Georgia, serif", fontSize:"1.1rem", letterSpacing:"-0.02em"}}>
-                {concert.name}
-              </h3>
-              <p className="text-xs mt-0.5" style={{color:"#666", fontFamily:"'Courier New', monospace"}}>
-                {concert.venue} · {concert.date}
-              </p>
-            </div>
-            {/* Match score */}
-            <div className="flex-shrink-0 flex flex-col items-center" style={{minWidth:"44px"}}>
-              <div className="text-xl font-black leading-none" style={{color:"#F5A623", fontFamily:"Georgia, serif"}}>{concert.match}</div>
-              <div className="text-xs" style={{color:"#555", fontFamily:"'Courier New', monospace"}}>FIT</div>
-            </div>
+      <div
+        style={{
+          position: "relative",
+          transformStyle: "preserve-3d",
+          transition: "transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)",
+          transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+          height: "280px",
+          cursor: "pointer",
+        }}
+        onClick={() => setFlipped((f) => !f)}
+      >
+        {/* ── FRONT ── */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            background: "var(--card)",
+            border: "1px solid var(--border)",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Image */}
+          <div style={{ position: "relative", height: "130px", flexShrink: 0, background: "#111" }}>
+            {event.image && (
+              <img
+                src={event.image}
+                alt={event.name}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: 0.7,
+                  filter: "saturate(0.6) contrast(1.1)",
+                }}
+              />
+            )}
+            {/* Score badge */}
+            {score !== null && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "10px",
+                  right: "10px",
+                  background: "rgba(0,0,0,0.85)",
+                  border: `1px solid ${scoreColor}`,
+                  padding: "4px 10px",
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: "2px",
+                }}
+              >
+                <span
+                  className="font-display"
+                  style={{ fontSize: "1.4rem", color: scoreColor, lineHeight: 1 }}
+                >
+                  {score}
+                </span>
+                <span style={{ fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>
+                  /10
+                </span>
+              </div>
+            )}
+            {/* Genre tag */}
+            {event.genre && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "10px",
+                  left: "10px",
+                  background: "rgba(0,0,0,0.8)",
+                  border: "1px solid var(--border)",
+                  padding: "3px 8px",
+                  fontSize: "0.55rem",
+                  letterSpacing: "0.2em",
+                  color: "var(--muted)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {event.genre}
+              </div>
+            )}
           </div>
 
-          {/* Vibe tags */}
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {concert.tags.map(tag => (
-              <span key={tag} className="px-2 py-0.5 rounded-full text-xs" style={{background:"#1a1a1a", color:"#666", fontFamily:"'Courier New', monospace", border:"1px solid #242424"}}>
-                {tag}
+          {/* Content */}
+          <div
+            style={{
+              padding: "14px 16px",
+              flex: 1,
+              display: "flex",
+              gap: "14px",
+              overflow: "hidden",
+            }}
+          >
+            {/* Date column */}
+            <div
+              style={{
+                flexShrink: 0,
+                borderRight: "1px solid var(--border)",
+                paddingRight: "14px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "44px",
+              }}
+            >
+              <span style={{ fontSize: "0.55rem", color: "var(--gold)", letterSpacing: "0.15em" }}>{month}</span>
+              <span className="font-display" style={{ fontSize: "1.8rem", lineHeight: 1, color: "#fff" }}>
+                {day}
               </span>
-            ))}
+              <span style={{ fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>{weekday}</span>
+            </div>
+
+            {/* Main info */}
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <h3
+                className="font-ui"
+                style={{
+                  fontSize: "0.9rem",
+                  fontWeight: 700,
+                  color: "#fff",
+                  lineHeight: 1.2,
+                  marginBottom: "4px",
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                }}
+              >
+                {event.name}
+              </h3>
+              <p style={{ fontSize: "0.65rem", color: "var(--muted)", letterSpacing: "0.05em", marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                📍 {event.venue}
+              </p>
+              {/* Vibe tags */}
+              {vibeTags.length > 0 && (
+                <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                  {vibeTags.map((tag) => (
+                    <span
+                      key={tag}
+                      style={{
+                        background: "rgba(0,229,204,0.08)",
+                        border: "1px solid rgba(0,229,204,0.2)",
+                        color: "var(--cyan)",
+                        padding: "2px 7px",
+                        fontSize: "0.55rem",
+                        letterSpacing: "0.1em",
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Flip hint */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: "10px",
+              right: "12px",
+              fontSize: "0.55rem",
+              color: "var(--border)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            TAP FOR WHY →
           </div>
         </div>
-      </div>
 
-      {/* Expanded: AI explanation */}
-      {expanded && (
-        <div className="px-4 pb-4 pt-0 border-t" style={{borderColor:"#1e1e1e"}}>
-          <div className="mt-3 flex gap-3 items-start">
-            <div className="flex-shrink-0 w-5 h-5 rounded-sm flex items-center justify-center mt-0.5" style={{background:"#F5A623"}}>
-              <span style={{fontSize:"10px", color:"#0A0A0A", fontWeight:"bold"}}>AI</span>
+        {/* ── BACK (AI explanation) ── */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+            background: "#0f0f0f",
+            border: "1px solid var(--gold)",
+            padding: "20px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "0.55rem",
+                letterSpacing: "0.25em",
+                color: "var(--gold)",
+                textTransform: "uppercase",
+                marginBottom: "10px",
+              }}
+            >
+              ◆ Claude says
             </div>
-            <p className="text-sm leading-relaxed" style={{color:"#aaa", fontFamily:"Georgia, serif", fontStyle:"italic"}}>
-              "{concert.explanation}"
+            <p
+              style={{
+                color: "var(--text)",
+                fontSize: "0.78rem",
+                lineHeight: 1.75,
+                fontStyle: "italic",
+              }}
+            >
+              {explanation ?? "No AI explanation available for this show."}
             </p>
           </div>
-          <div className="flex justify-between items-center mt-4">
-            <a href="#" className="text-xs underline transition-colors hover:opacity-80" style={{color:"#F5A623", fontFamily:"'Courier New', monospace"}}>
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+            <a
+              href={event.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                flex: 1,
+                background: "var(--gold)",
+                color: "#000",
+                textDecoration: "none",
+                textAlign: "center",
+                padding: "10px",
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: "0.85rem",
+                letterSpacing: "0.15em",
+              }}
+            >
               GET TICKETS →
             </a>
             <button
-              onClick={e => { e.stopPropagation(); setSaved(s => !s); }}
-              className="flex items-center gap-1.5 text-xs transition-all"
-              style={{color: saved ? "#F5A623" : "#555", fontFamily:"'Courier New', monospace"}}
+              onClick={(e) => { e.stopPropagation(); setSaved((s) => !s); }}
+              style={{
+                background: saved ? "rgba(0,229,204,0.15)" : "transparent",
+                border: `1px solid ${saved ? "var(--cyan)" : "var(--border)"}`,
+                color: saved ? "var(--cyan)" : "var(--muted)",
+                padding: "10px 14px",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                transition: "all 0.2s",
+              }}
             >
-              <svg className="w-3.5 h-3.5" fill={saved ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
-              {saved ? "SAVED" : "SAVE"}
+              {saved ? "♥" : "♡"}
             </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
-};
-
-export default ConcertCard
+}

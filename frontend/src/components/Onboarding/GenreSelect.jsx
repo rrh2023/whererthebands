@@ -1,79 +1,187 @@
-import {useState} from "react";
-import { GENRES } from "../../constants/genres";
+// src/components/Onboarding/GenreSelect.jsx
+import { useState } from "react";
 
-const GenreSelect = ({ onComplete }) => {
+const GENRES = [
+  { name: "Indie Rock", emoji: "🎸", color: "#e74c3c" },
+  { name: "Electronic", emoji: "⚡", color: "#00e5cc" },
+  { name: "Hip-Hop", emoji: "🎤", color: "#f0a500" },
+  { name: "Jazz", emoji: "🎷", color: "#9b59b6" },
+  { name: "Metal", emoji: "🤘", color: "#e74c3c" },
+  { name: "Folk", emoji: "🪕", color: "#27ae60" },
+  { name: "Pop", emoji: "✨", color: "#e91e63" },
+  { name: "R&B / Soul", emoji: "🎶", color: "#ff9800" },
+  { name: "Country", emoji: "🤠", color: "#795548" },
+  { name: "Punk", emoji: "⚡", color: "#f44336" },
+  { name: "Classical", emoji: "🎻", color: "#607d8b" },
+  { name: "Reggae", emoji: "🌿", color: "#4caf50" },
+  { name: "Blues", emoji: "🎵", color: "#1565c0" },
+  { name: "Alternative", emoji: "🔊", color: "#00bcd4" },
+  { name: "Latin", emoji: "🎺", color: "#ff5722" },
+  { name: "Experimental", emoji: "🔭", color: "#7c3aed" },
+];
+
+export default function GenreSelect({ onComplete }) {
   const [selected, setSelected] = useState([]);
+  const [animating, setAnimating] = useState(false);
 
-  const toggle = (g) => setSelected(prev =>
-    prev.includes(g) ? prev.filter(x => x !== g) : prev.length < 5 ? [...prev, g] : prev
-  );
+  const toggle = (genre) => {
+    setSelected((prev) =>
+      prev.includes(genre)
+        ? prev.filter((g) => g !== genre)
+        : prev.length < 6
+        ? [...prev, genre]
+        : prev
+    );
+  };
+
+  const handleContinue = () => {
+    if (selected.length < 1) return;
+    setAnimating(true);
+    setTimeout(() => onComplete(selected), 400);
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{background:"#0A0A0A"}}>
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-5" style={{background:"repeating-linear-gradient(0deg, transparent, transparent 39px, #F5A623 39px, #F5A623 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, #F5A623 39px, #F5A623 40px)"}}/>
-      </div>
-      <div className="relative z-10 w-full max-w-lg text-center">
-        <div className="mb-2">
-          <span className="text-xs tracking-widest" style={{color:"#F5A623", fontFamily:"'Courier New', monospace"}}>STEP 1 OF 1</span>
+    <div
+      style={{
+        minHeight: "100vh",
+        maxWidth: "640px",
+        margin: "0 auto",
+        padding: "4rem 2rem 6rem",
+        opacity: animating ? 0 : 1,
+        transform: animating ? "translateY(-20px)" : "translateY(0)",
+        transition: "all 0.4s ease",
+      }}
+    >
+      {/* Header */}
+      <div className="animate-fadeUp" style={{ marginBottom: "3rem" }}>
+        <div
+          style={{
+            fontSize: "0.65rem",
+            letterSpacing: "0.3em",
+            color: "var(--gold)",
+            textTransform: "uppercase",
+            marginBottom: "1rem",
+          }}
+        >
+          ◆ Step 1 of 1
         </div>
-        <h1 className="text-4xl font-black mb-3 text-white leading-none" style={{fontFamily:"Georgia, serif", letterSpacing:"-0.04em"}}>
-          What moves you?
+        <h1
+          className="font-display"
+          style={{ fontSize: "clamp(2.5rem, 8vw, 4rem)", lineHeight: 0.9, marginBottom: "1rem" }}
+        >
+          WHAT DO YOU
+          <br />
+          <span style={{ color: "var(--gold)" }}>LISTEN TO?</span>
         </h1>
-        <p className="text-sm mb-10" style={{color:"#666", fontFamily:"'Courier New', monospace"}}>
-          PICK UP TO 5 GENRES — WE'LL DO THE REST
+        <p style={{ color: "var(--muted)", fontSize: "0.75rem", letterSpacing: "0.08em", lineHeight: 1.7 }}>
+          Pick up to 6 genres. Claude will use these to find
+          <br />
+          shows you'll actually want to go to.
         </p>
+      </div>
 
-        <div className="flex flex-wrap justify-center gap-3 mb-10">
-          {GENRES.map(g => {
-            const on = selected.includes(g);
-            return (
-              <button
-                key={g}
-                onClick={() => toggle(g)}
-                className="px-5 py-2.5 rounded-full text-sm font-medium transition-all"
+      {/* Genre Grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+          gap: "10px",
+          marginBottom: "3rem",
+        }}
+      >
+        {GENRES.map((genre, i) => {
+          const isSelected = selected.includes(genre.name);
+          return (
+            <button
+              key={genre.name}
+              onClick={() => toggle(genre.name)}
+              className="animate-fadeUp"
+              style={{
+                animationDelay: `${i * 30}ms`,
+                background: isSelected ? genre.color : "var(--card)",
+                border: `1px solid ${isSelected ? genre.color : "var(--border)"}`,
+                color: isSelected ? "#000" : "var(--text)",
+                padding: "14px 12px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: "6px",
+                cursor: !isSelected && selected.length >= 6 ? "not-allowed" : "pointer",
+                opacity: !isSelected && selected.length >= 6 ? 0.4 : 1,
+                transition: "all 0.2s",
+                textAlign: "left",
+                transform: isSelected ? "scale(1.02)" : "scale(1)",
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected && selected.length < 6)
+                  e.currentTarget.style.borderColor = genre.color;
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) e.currentTarget.style.borderColor = "var(--border)";
+              }}
+            >
+              <span style={{ fontSize: "1.2rem" }}>{genre.emoji}</span>
+              <span
                 style={{
-                  background: on ? "#F5A623" : "#141414",
-                  color: on ? "#0A0A0A" : "#888",
-                  border: `1px solid ${on ? "#F5A623" : "#2a2a2a"}`,
-                  fontFamily:"'Courier New', monospace",
-                  letterSpacing:"0.04em",
-                  transform: on ? "scale(1.05)" : "scale(1)",
+                  fontFamily: "'DM Mono', monospace",
+                  fontSize: "0.7rem",
+                  letterSpacing: "0.05em",
+                  fontWeight: isSelected ? "500" : "300",
                 }}
               >
-                {g.toUpperCase()}
-              </button>
-            );
-          })}
-        </div>
+                {genre.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <span className="text-xs" style={{color:"#444", fontFamily:"'Courier New', monospace"}}>
-            {selected.length}/5 SELECTED
-          </span>
-          <div className="flex gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="w-6 h-1 rounded-full transition-all" style={{background: i < selected.length ? "#F5A623" : "#222"}}/>
-            ))}
-          </div>
+      {/* Footer */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: "1.5rem 2rem",
+          background: "linear-gradient(to top, var(--bg) 70%, transparent)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "1.5rem",
+        }}
+      >
+        <div style={{ color: "var(--muted)", fontSize: "0.7rem", letterSpacing: "0.1em" }}>
+          {selected.length > 0 ? (
+            <span style={{ color: "var(--gold)" }}>
+              {selected.length} selected {selected.length >= 6 && "(max)"}
+            </span>
+          ) : (
+            "Select at least 1 genre"
+          )}
         </div>
 
         <button
-          onClick={() => selected.length > 0 && onComplete(selected)}
-          className="w-full py-4 rounded font-bold text-sm tracking-widest transition-all"
+          onClick={handleContinue}
+          disabled={selected.length < 1}
           style={{
-            background: selected.length > 0 ? "#F5A623" : "#1a1a1a",
-            color: selected.length > 0 ? "#0A0A0A" : "#333",
-            fontFamily:"'Courier New', monospace",
-            letterSpacing:"0.12em",
-            cursor: selected.length > 0 ? "pointer" : "not-allowed",
+            background: selected.length >= 1 ? "var(--gold)" : "var(--border)",
+            color: selected.length >= 1 ? "#000" : "var(--muted)",
+            border: "none",
+            padding: "14px 32px",
+            fontFamily: "'Bebas Neue', sans-serif",
+            fontSize: "1rem",
+            letterSpacing: "0.2em",
+            cursor: selected.length >= 1 ? "pointer" : "not-allowed",
+            transition: "all 0.3s",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          {selected.length > 0 ? "FIND MY SHOWS →" : "SELECT AT LEAST ONE"}
+          FIND MY SHOWS →
         </button>
       </div>
     </div>
   );
-};
-
-export default GenreSelect
+}

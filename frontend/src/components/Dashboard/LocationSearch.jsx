@@ -1,34 +1,149 @@
-import { useState } from 'react';
+// src/components/Dashboard/LocationSearch.jsx
+import { useState } from "react";
 
-const LocationSearch = ({ onSearch, loading }) => {
-  const [loc, setLoc] = useState("Brooklyn, NY");
+export default function LocationSearch({ onSearch, loading }) {
+  const [city, setCity] = useState("");
+  const [radius, setRadius] = useState(25);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!city.trim()) return;
+    onSearch({ city: city.trim(), radius });
+  };
+
+  const radii = [10, 25, 50, 100];
 
   return (
-    <div className="flex gap-3 items-center">
-      <div className="relative flex-1 max-w-xs">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{color:"#555"}} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        background: "var(--card)",
+        border: "1px solid var(--border)",
+        padding: "20px 24px",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "16px",
+        alignItems: "flex-end",
+      }}
+    >
+      {/* City input */}
+      <div style={{ flex: "1 1 200px", minWidth: "160px" }}>
+        <label
+          style={{
+            display: "block",
+            fontSize: "0.55rem",
+            letterSpacing: "0.25em",
+            color: "var(--muted)",
+            textTransform: "uppercase",
+            marginBottom: "8px",
+          }}
+        >
+          City / ZIP
+        </label>
         <input
-          value={loc}
-          onChange={e => setLoc(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded text-white text-sm outline-none"
-          style={{background:"#141414", border:"1px solid #2a2a2a", fontFamily:"'Courier New', monospace"}}
-          onFocus={e => e.target.style.borderColor = "#F5A623"}
-          onBlur={e => e.target.style.borderColor = "#2a2a2a"}
+          type="text"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          placeholder="New York, NY"
+          required
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            borderBottom: "1px solid var(--border)",
+            padding: "10px 0",
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "0.9rem",
+            color: "var(--text)",
+            outline: "none",
+            letterSpacing: "0.05em",
+            transition: "border-color 0.2s",
+          }}
+          onFocus={(e) => (e.target.style.borderBottomColor = "var(--gold)")}
+          onBlur={(e) => (e.target.style.borderBottomColor = "var(--border)")}
         />
       </div>
-      <button
-        onClick={() => onSearch(loc)}
-        disabled={loading}
-        className="px-5 py-2.5 rounded text-sm font-bold tracking-widest transition-all hover:opacity-90 disabled:opacity-40"
-        style={{background:"#F5A623", color:"#0A0A0A", fontFamily:"'Courier New', monospace", letterSpacing:"0.08em"}}
-      >
-        {loading ? "..." : "SEARCH"}
-      </button>
-    </div>
-  );
-};
 
-export default LocationSearch
+      {/* Radius selector */}
+      <div style={{ flex: "0 0 auto" }}>
+        <label
+          style={{
+            display: "block",
+            fontSize: "0.55rem",
+            letterSpacing: "0.25em",
+            color: "var(--muted)",
+            textTransform: "uppercase",
+            marginBottom: "8px",
+          }}
+        >
+          Radius
+        </label>
+        <div style={{ display: "flex", gap: "6px" }}>
+          {radii.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRadius(r)}
+              style={{
+                background: radius === r ? "var(--gold)" : "transparent",
+                color: radius === r ? "#000" : "var(--muted)",
+                border: `1px solid ${radius === r ? "var(--gold)" : "var(--border)"}`,
+                padding: "8px 12px",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: "0.7rem",
+                cursor: "pointer",
+                letterSpacing: "0.05em",
+                transition: "all 0.15s",
+              }}
+            >
+              {r}mi
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Submit */}
+      <button
+        type="submit"
+        disabled={loading}
+        style={{
+          background: loading ? "var(--border)" : "var(--gold)",
+          color: loading ? "var(--muted)" : "#000",
+          border: "none",
+          padding: "10px 28px",
+          fontFamily: "'Bebas Neue', sans-serif",
+          fontSize: "1rem",
+          letterSpacing: "0.2em",
+          cursor: loading ? "not-allowed" : "pointer",
+          flex: "0 0 auto",
+          transition: "all 0.2s",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {loading ? (
+          <>
+            <span
+              style={{
+                width: "12px",
+                height: "12px",
+                border: "2px solid var(--muted)",
+                borderTopColor: "transparent",
+                borderRadius: "50%",
+                display: "inline-block",
+                animation: "spin 0.8s linear infinite",
+              }}
+            />
+            SEARCHING...
+          </>
+        ) : (
+          "FIND SHOWS →"
+        )}
+      </button>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </form>
+  );
+}

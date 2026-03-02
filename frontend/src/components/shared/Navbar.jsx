@@ -1,33 +1,75 @@
-import Logo from './Logo'
+// src/components/shared/Navbar.jsx
+export default function Navbar({ user, onLogout }) {
+  return (
+    <nav
+      style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+        borderBottom: "1px solid var(--border)",
+        background: "rgba(8,8,8,0.92)",
+        backdropFilter: "blur(12px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 2rem",
+        height: "60px",
+      }}
+    >
+      {/* Wordmark */}
+      <div
+        className="font-display"
+        style={{ fontSize: "1.5rem", letterSpacing: "0.12em", color: "#fff" }}
+      >
+        WHERE
+        <span style={{ color: "var(--gold)" }}>R</span>
+        THE
+        <span style={{ color: "var(--cyan)" }}>BANDS</span>
+        <span style={{ color: "var(--muted)", fontSize: "0.6rem", marginLeft: "6px", verticalAlign: "middle", fontFamily: "'DM Mono', monospace", letterSpacing: "0.2em" }}>
+          ?
+        </span>
+      </div>
 
-
-const Navbar = ({ onNav, active }) => (
-  <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white border-opacity-10" style={{background:"rgba(10,10,10,0.92)", backdropFilter:"blur(12px)"}}>
-    <Logo />
-    <div className="flex items-center gap-1">
-      {["Dashboard","Profile"].map(item => (
+      {/* Right side */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+        {user && (
+          <span
+            style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: "0.7rem",
+              color: "var(--muted)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            {user.email?.split("@")[0] ?? "listener"}
+          </span>
+        )}
         <button
-          key={item}
-          onClick={() => onNav(item)}
-          className="px-4 py-1.5 text-sm font-medium rounded transition-all"
+          onClick={onLogout}
           style={{
-            color: active === item ? "#0A0A0A" : "#888",
-            background: active === item ? "#F5A623" : "transparent",
-            fontFamily:"'Courier New', monospace",
-            letterSpacing:"0.05em",
+            background: "transparent",
+            border: "1px solid var(--border)",
+            color: "var(--muted)",
+            padding: "6px 14px",
+            fontFamily: "'DM Mono', monospace",
+            fontSize: "0.65rem",
+            letterSpacing: "0.15em",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            textTransform: "uppercase",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--red)";
+            e.currentTarget.style.color = "var(--red)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.color = "var(--muted)";
           }}
         >
-          {item.toUpperCase()}
+          LOGOUT
         </button>
-      ))}
-    </div>
-    <button
-      className="text-xs font-medium px-3 py-1.5 rounded border transition-all hover:bg-white hover:text-black"
-      style={{color:"#888", borderColor:"#333", fontFamily:"'Courier New', monospace"}}
-    >
-      SIGN OUT
-    </button>
-  </nav>
-);
-
-export default Navbar
+      </div>
+    </nav>
+  );
+}
