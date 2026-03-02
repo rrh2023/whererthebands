@@ -78,10 +78,6 @@ export default function Dashboard({ user }) {
       setEvents(eventsData);
       setAiPhase("analyzing");
 
-      console.log("genres:", user.genres);
-      console.log("events:", eventsData);
-
-
       // 2. Get AI recommendations
       const recsData = await getRecommendations(user.genres ?? [], eventsData);
       setRecommendations(recsData);
