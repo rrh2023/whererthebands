@@ -62,7 +62,7 @@ export default function Dashboard({ user }) {
   const [aiPhase, setAiPhase] = useState(null); // null | "fetching" | "analyzing" | "done"
   const [error, setError] = useState("");
   const [lastCity, setLastCity] = useState("");
-  const [saved, setSaved] = useState([]);
+  const [saved] = useState([]);
 
   const handleSearch = async ({ city, radius }) => {
     setLoading(true);
