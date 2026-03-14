@@ -84,10 +84,13 @@ export default function Dashboard({ user, onSessionExpired }) {
     try {
       const eventsData = await getEvents(city, radius);
       setEvents(eventsData);
-      setAiPhase("analyzing");
 
-      const recsData = await getRecommendations(user.genres ?? [], eventsData);
-      setRecommendations(recsData);
+      const genres = user.genres ?? [];
+      if (eventsData.length > 0 && genres.length > 0) {
+        setAiPhase("analyzing");
+        const recsData = await getRecommendations(genres, eventsData);
+        setRecommendations(recsData);
+      }
       setAiPhase("done");
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") { onSessionExpired?.(); return; }
