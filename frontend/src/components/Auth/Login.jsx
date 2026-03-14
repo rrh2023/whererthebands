@@ -1,6 +1,6 @@
 // src/components/Auth/Login.jsx
 import { useState } from "react";
-  import { signIn, signOut } from '../../services/cognito';
+import { signIn } from '../../services/cognito';
 
 const inputStyle = {
   width: "100%",
@@ -16,27 +16,25 @@ const inputStyle = {
   transition: "border-color 0.2s",
 };
 
-export default function Login({ onLogin, onGoSignup }) {
-  const [email, setEmail] = useState("");
+export default function Login({ onLogin, onGoSignup, onGoForgotPassword }) {
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
-
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError("");
-  try {
-    await signOut(); // clear any existing session first
-    await signIn({ username: email, password });
-    onLogin({ email, isNew: false });
-  } catch (err) {
-    setError(err.message || "Login failed.");
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await signIn({ username: email, password });
+      onLogin({ email, isNew: false });
+    } catch (err) {
+      setError(err.message || "Login failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div
@@ -139,7 +137,7 @@ const handleSubmit = async (e) => {
             />
           </div>
 
-          <div style={{ marginBottom: "2rem" }}>
+          <div style={{ marginBottom: "0.5rem" }}>
             <label
               style={{
                 display: "block",
@@ -162,6 +160,29 @@ const handleSubmit = async (e) => {
               onFocus={(e) => (e.target.style.borderBottomColor = "var(--gold)")}
               onBlur={(e) => (e.target.style.borderBottomColor = "var(--border)")}
             />
+          </div>
+
+          {/* Forgot password link */}
+          <div style={{ textAlign: "right", marginBottom: "2rem" }}>
+            <button
+              type="button"
+              onClick={onGoForgotPassword}
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--muted)",
+                cursor: "pointer",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: "0.65rem",
+                letterSpacing: "0.08em",
+                textDecoration: "underline",
+                padding: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+            >
+              Forgot password?
+            </button>
           </div>
 
           {error && (

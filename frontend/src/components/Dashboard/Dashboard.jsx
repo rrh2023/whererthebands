@@ -1,12 +1,11 @@
 // src/components/Dashboard/Dashboard.jsx
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import LocationSearch from "./LocationSearch";
 import ConcertCard from "./ConcertCard";
-import { getEvents, getRecommendations } from "../../services/api";
+import { getEvents, getRecommendations, getProfile, saveShow, unsaveShow } from "../../services/api";
 
 const TABS = ["AI PICKS", "ALL SHOWS", "SAVED"];
 
-// Skeleton card for loading state
 function SkeletonCard() {
   return (
     <div
@@ -20,18 +19,10 @@ function SkeletonCard() {
     >
       <div style={{ height: "130px", background: "#1a1a1a" }} />
       <div style={{ padding: "14px 16px", display: "flex", gap: "14px" }}>
-        <div
-          style={{
-            width: "44px",
-            flexShrink: 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: "4px",
-          }}
-        >
+        <div style={{ width: "44px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "4px" }}>
           <div style={{ height: "10px", background: "#2a2a2a", borderRadius: "2px" }} />
           <div style={{ height: "28px", background: "#2a2a2a", borderRadius: "2px" }} />
-          <div style={{ height: "8px", background: "#2a2a2a", borderRadius: "2px" }} />
+          <div style={{ height: "8px",  background: "#2a2a2a", borderRadius: "2px" }} />
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
           <div style={{ height: "14px", background: "#2a2a2a", borderRadius: "2px", width: "80%" }} />
@@ -39,7 +30,6 @@ function SkeletonCard() {
           <div style={{ height: "10px", background: "#2a2a2a", borderRadius: "2px", width: "40%" }} />
         </div>
       </div>
-      {/* Shimmer effect */}
       <div
         style={{
           position: "absolute",
@@ -54,15 +44,34 @@ function SkeletonCard() {
   );
 }
 
-export default function Dashboard({ user }) {
-  const [tab, setTab] = useState("ALL SHOWS");
-  const [loading, setLoading] = useState(false);
-  const [events, setEvents] = useState([]);
+export default function Dashboard({ user, onSessionExpired }) {
+  const [tab, setTab]                     = useState("ALL SHOWS");
+  const [loading, setLoading]             = useState(false);
+  const [events, setEvents]               = useState([]);
   const [recommendations, setRecommendations] = useState([]);
-  const [aiPhase, setAiPhase] = useState(null); // null | "fetching" | "analyzing" | "done"
-  const [error, setError] = useState("");
-  const [lastCity, setLastCity] = useState("");
-  const [saved] = useState([]);
+  const [aiPhase, setAiPhase]             = useState(null);
+  const [error, setError]                 = useState("");
+  const [lastCity, setLastCity]           = useState("");
+
+  // FIX: savedShows is now real state loaded from the user's profile
+  const [savedShows, setSavedShows]       = useState([]);
+  const [savedIds, setSavedIds]           = useState(new Set());
+
+  // Load saved shows on mount
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const profile = await getProfile();
+        const shows = profile.savedShows ?? [];
+        setSavedShows(shows);
+        setSavedIds(new Set(shows.map((s) => s.id)));
+      } catch (err) {
+      if (err.message === "SESSION_EXPIRED") { onSessionExpired?.(); return; }
+      // Non-fatal: saved tab will just be empty
+    }
+    };
+    loadSaved();
+  }, []);
 
   const handleSearch = async ({ city, radius }) => {
     setLoading(true);
@@ -73,16 +82,15 @@ export default function Dashboard({ user }) {
     setLastCity(city);
 
     try {
-      // 1. Fetch events
       const eventsData = await getEvents(city, radius);
       setEvents(eventsData);
       setAiPhase("analyzing");
 
-      // 2. Get AI recommendations
       const recsData = await getRecommendations(user.genres ?? [], eventsData);
       setRecommendations(recsData);
       setAiPhase("done");
     } catch (err) {
+      if (err.message === "SESSION_EXPIRED") { onSessionExpired?.(); return; }
       console.error("Full error:", err);
       setError(err.message || "Something went wrong. Check your connection and try again.");
       setAiPhase(null);
@@ -91,7 +99,24 @@ export default function Dashboard({ user }) {
     }
   };
 
-  // Map rec event_ids to full event objects
+  // FIX: actually call the API when saving/unsaving
+  const handleSaveToggle = useCallback(async (event) => {
+    const isSaved = savedIds.has(event.id);
+    try {
+      if (isSaved) {
+        await unsaveShow(event.id);
+        setSavedShows((prev) => prev.filter((s) => s.id !== event.id));
+        setSavedIds((prev) => { const next = new Set(prev); next.delete(event.id); return next; });
+      } else {
+        await saveShow(event);
+        setSavedShows((prev) => [...prev, event]);
+        setSavedIds((prev) => new Set([...prev, event.id]));
+      }
+    } catch (err) {
+      console.error("Save toggle failed:", err);
+    }
+  }, [savedIds]);
+
   const recMap = {};
   recommendations.forEach((r) => { recMap[r.event_id] = r; });
 
@@ -99,11 +124,11 @@ export default function Dashboard({ user }) {
     .map((r) => events.find((e) => e.id === r.event_id))
     .filter(Boolean);
 
-const tabContent = {
-  "AI PICKS": aiPickEvents ?? [],
-  "ALL SHOWS": events ?? [],
-  SAVED: saved ?? [],
-};
+  const tabContent = {
+    "AI PICKS":  aiPickEvents,
+    "ALL SHOWS": events,
+    "SAVED":     savedShows,
+  };
 
   const displayed = tabContent[tab] ?? [];
 
@@ -111,25 +136,10 @@ const tabContent = {
     <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "2rem 1.5rem" }}>
       {/* Page header */}
       <div className="animate-fadeUp" style={{ marginBottom: "2rem" }}>
-        <div
-          style={{
-            fontSize: "0.6rem",
-            letterSpacing: "0.3em",
-            color: "var(--muted)",
-            textTransform: "uppercase",
-            marginBottom: "0.5rem",
-          }}
-        >
+        <div style={{ fontSize: "0.6rem", letterSpacing: "0.3em", color: "var(--muted)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
           ◆ LIVE NEAR YOU
         </div>
-        <h1
-          className="font-display"
-          style={{
-            fontSize: "clamp(2rem, 6vw, 3.5rem)",
-            lineHeight: 0.9,
-            marginBottom: "0.5rem",
-          }}
-        >
+        <h1 className="font-display" style={{ fontSize: "clamp(2rem, 6vw, 3.5rem)", lineHeight: 0.9, marginBottom: "0.5rem" }}>
           TONIGHT'S
           <br />
           <span style={{ color: "var(--gold)" }}>LINEUP</span>
@@ -196,16 +206,9 @@ const tabContent = {
         </div>
       )}
 
-      {/* Tabs */}
-      {(events.length > 0 || loading) && (
-        <div
-          style={{
-            display: "flex",
-            borderBottom: "1px solid var(--border)",
-            marginBottom: "1.5rem",
-            gap: "0",
-          }}
-        >
+      {/* Tabs — show SAVED tab always; others only after search */}
+      {(events.length > 0 || loading || savedShows.length > 0) && (
+        <div style={{ display: "flex", borderBottom: "1px solid var(--border)", marginBottom: "1.5rem" }}>
           {TABS.map((t) => (
             <button
               key={t}
@@ -227,22 +230,18 @@ const tabContent = {
             >
               {t}
               {t === "AI PICKS" && recommendations.length > 0 && (
-                <span
-                  style={{
-                    marginLeft: "6px",
-                    background: "var(--gold)",
-                    color: "#000",
-                    borderRadius: "0",
-                    padding: "1px 5px",
-                    fontSize: "0.55rem",
-                  }}
-                >
+                <span style={{ marginLeft: "6px", background: "var(--gold)", color: "#000", padding: "1px 5px", fontSize: "0.55rem" }}>
                   {recommendations.length}
                 </span>
               )}
               {t === "ALL SHOWS" && events.length > 0 && (
                 <span style={{ marginLeft: "6px", color: "var(--border)", fontSize: "0.55rem" }}>
                   {events.length}
+                </span>
+              )}
+              {t === "SAVED" && savedShows.length > 0 && (
+                <span style={{ marginLeft: "6px", color: "var(--cyan)", fontSize: "0.55rem" }}>
+                  {savedShows.length}
                 </span>
               )}
             </button>
@@ -252,50 +251,41 @@ const tabContent = {
 
       {/* Grid */}
       {loading ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: "14px",
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
           {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : displayed.length > 0 ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: "14px",
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "14px" }}>
           {displayed.filter(Boolean).map((event, i) => (
             <ConcertCard
               key={event.id}
               event={event}
               recommendation={recMap[event.id] ?? null}
               index={i}
+              isSaved={savedIds.has(event.id)}
+              onSaveToggle={handleSaveToggle}
             />
           ))}
         </div>
-      ) : events.length === 0 && aiPhase === null ? (
-        /* Empty state — before any search */
-        <div
-          style={{
-            textAlign: "center",
-            padding: "6rem 2rem",
-            position: "relative",
-          }}
-        >
+      ) : tab === "SAVED" ? (
+        <div style={{ textAlign: "center", padding: "6rem 2rem" }}>
           <div
             className="font-display"
-            style={{
-              fontSize: "clamp(4rem, 15vw, 10rem)",
-              color: "transparent",
-              WebkitTextStroke: "1px #1e1e1e",
-              lineHeight: 0.9,
-              marginBottom: "2rem",
-            }}
+            style={{ fontSize: "clamp(3rem, 12vw, 8rem)", color: "transparent", WebkitTextStroke: "1px #1e1e1e", lineHeight: 0.9, marginBottom: "2rem" }}
+          >
+            NO SAVED
+            <br />
+            SHOWS
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: "0.75rem", letterSpacing: "0.15em" }}>
+            SAVE SHOWS FROM THE ALL SHOWS TAB
+          </p>
+        </div>
+      ) : events.length === 0 && aiPhase === null ? (
+        <div style={{ textAlign: "center", padding: "6rem 2rem", position: "relative" }}>
+          <div
+            className="font-display"
+            style={{ fontSize: "clamp(4rem, 15vw, 10rem)", color: "transparent", WebkitTextStroke: "1px #1e1e1e", lineHeight: 0.9, marginBottom: "2rem" }}
           >
             NO SHOWS
             <br />

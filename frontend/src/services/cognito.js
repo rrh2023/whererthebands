@@ -7,6 +7,8 @@ import {
   getCurrentUser,
   confirmSignUp,
   fetchAuthSession,
+  resetPassword,
+  confirmResetPassword,
 } from 'aws-amplify/auth';
 
 Amplify.configure({
@@ -19,4 +21,13 @@ Amplify.configure({
   },
 });
 
-export { signIn, signUp, signOut, getCurrentUser, confirmSignUp, fetchAuthSession };
+export {
+  signIn,
+  signUp,
+  signOut,
+  getCurrentUser,
+  confirmSignUp,
+  fetchAuthSession,
+  resetPassword,
+  confirmResetPassword,
+};

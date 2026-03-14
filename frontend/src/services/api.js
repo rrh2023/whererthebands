@@ -5,7 +5,11 @@ const BASE = process.env.REACT_APP_API_BASE_URL;
 
 async function authHeaders() {
   const session = await fetchAuthSession();
-  const token   = session.tokens.idToken.toString();
+  const token   = session?.tokens?.idToken?.toString();
+  if (!token) {
+    // Session expired or user is not authenticated — trigger a re-login
+    throw new Error("SESSION_EXPIRED");
+  }
   return {
     Authorization:  token,
     'Content-Type': 'application/json',

@@ -5,6 +5,7 @@ import { getProfile } from "./services/api";
 import Navbar from "./components/shared/Navbar";
 import Login from "./components/Auth/Login";
 import Signup from "./components/Auth/Signup";
+import ForgotPassword from "./components/Auth/ForgotPassword";
 import GenreSelect from "./components/Onboarding/GenreSelect";
 import Dashboard from "./components/Dashboard/Dashboard";
 
@@ -66,34 +67,35 @@ const globalStyles = `
   .animate-fadeUp { animation: fadeUp 0.5s ease both; }
 `;
 
-// Simulated auth state machine: "login" | "signup" | "onboarding" | "dashboard"
+// Screens: "loading" | "login" | "signup" | "forgotPassword" | "onboarding" | "dashboard"
 export default function App() {
-  const [screen, setScreen] = useState("login");
-  const [user, setUser] = useState(null);
+  const [screen, setScreen] = useState("loading");
+  const [user, setUser]     = useState(null);
 
   useEffect(() => {
     const checkSession = async () => {
       try {
-    const currentUser = await getCurrentUser();
-    if (currentUser) {
-      const profile = await getProfile();
-      setUser({ 
-        email: currentUser.signInDetails?.loginId, 
-        isNew: false,
-        genres: profile.genres ?? [],
-      });
-      setScreen(profile.genres?.length > 0 ? "dashboard" : "onboarding");
-    }
-  } catch {
-    setScreen("login");
-  }
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
+          const profile = await getProfile();
+          setUser({
+            email:  currentUser.signInDetails?.loginId,
+            isNew:  false,
+            genres: profile.genres ?? [],
+          });
+          setScreen(profile.genres?.length > 0 ? "dashboard" : "onboarding");
+        } else {
+          setScreen("login");
+        }
+      } catch {
+        setScreen("login");
+      }
     };
     checkSession();
   }, []);
 
   const handleLogin = (userData) => {
     setUser(userData);
-    // New users go to onboarding, returning users to dashboard
     setScreen(userData.isNew ? "onboarding" : "dashboard");
   };
 
@@ -109,21 +111,57 @@ export default function App() {
 
   const isAuthed = screen === "dashboard" || screen === "onboarding";
 
+  // Loading splash — shown while checking existing session
+  if (screen === "loading") {
+    return (
+      <>
+        <style>{globalStyles}</style>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            className="font-display"
+            style={{
+              fontSize: "1.5rem",
+              letterSpacing: "0.3em",
+              color: "var(--muted)",
+              animation: "pulse-gold 1.5s infinite",
+            }}
+          >
+            LOADING...
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <style>{globalStyles}</style>
       {isAuthed && <Navbar user={user} onLogout={handleLogout} />}
       <main>
         {screen === "login" && (
-          <Login onLogin={handleLogin} onGoSignup={() => setScreen("signup")} />
+          <Login
+            onLogin={handleLogin}
+            onGoSignup={() => setScreen("signup")}
+            onGoForgotPassword={() => setScreen("forgotPassword")}
+          />
         )}
         {screen === "signup" && (
           <Signup onSignup={handleLogin} onGoLogin={() => setScreen("login")} />
         )}
+        {screen === "forgotPassword" && (
+          <ForgotPassword onGoLogin={() => setScreen("login")} />
+        )}
         {screen === "onboarding" && (
           <GenreSelect onComplete={handleOnboardingComplete} />
         )}
-        {screen === "dashboard" && <Dashboard user={user} />}
+        {screen === "dashboard" && <Dashboard user={user} onSessionExpired={handleLogout} />}
       </main>
     </>
   );
