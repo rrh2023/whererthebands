@@ -17,6 +17,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 TICKETMASTER_BASE = "https://app.ticketmaster.com/discovery/v2/events.json"
+NOMINATIM_BASE    = "https://nominatim.openstreetmap.org/search"
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": os.environ.get("ALLOWED_ORIGIN", "*"),
@@ -48,7 +49,10 @@ def handler(event, context):
         logger.error("TICKETMASTER_API_KEY not set")
         return error_response(500, "Server configuration error")
 
-    # Build query — support both city name and zip code
+    # Geocode the location to lat/lng so radius search works for
+    # small cities, suburbs, and zip codes (Ticketmaster city= is exact-match only)
+    coords = _geocode(location)
+
     params = {
         "apikey":             api_key,
         "radius":             radius,
@@ -59,11 +63,17 @@ def handler(event, context):
         "countryCode":        "US",
     }
 
-    # Ticketmaster distinguishes city vs postalCode
-    if location.replace("-", "").isdigit():
-        params["postalCode"] = location
+    if coords:
+        # geoPoint gives radius-based search from coordinates — most reliable
+        params["geoPoint"] = f"{coords['lat']},{coords['lng']}"
+        logger.info("Geocoded '%s' → %s", location, params["geoPoint"])
     else:
-        params["city"] = location
+        # Fall back to Ticketmaster's own city/zip matching
+        logger.warning("Geocoding failed for '%s', falling back to direct lookup", location)
+        if location.replace("-", "").isdigit():
+            params["postalCode"] = location
+        else:
+            params["city"] = location
 
     # Only pull future events (Ticketmaster default includes past sometimes)
     params["startDateTime"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -95,6 +105,35 @@ def handler(event, context):
 
     logger.info("Returning %d events for '%s'", len(cleaned), location)
     return success_response(cleaned)
+
+
+def _geocode(location: str) -> dict | None:
+    """
+    Convert a city name or zip code to lat/lng using OpenStreetMap Nominatim.
+    Returns {"lat": float, "lng": float} or None on failure.
+    """
+    is_zip = location.replace("-", "").isdigit()
+    params = {
+        "q":              location if not is_zip else f"{location}, USA",
+        "format":         "json",
+        "addressdetails": 0,
+        "limit":          1,
+        "countrycodes":   "us",
+    }
+    try:
+        resp = requests.get(
+            NOMINATIM_BASE,
+            params=params,
+            timeout=5,
+            headers={"User-Agent": "WhereRTheBands/1.0"},
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if results:
+            return {"lat": float(results[0]["lat"]), "lng": float(results[0]["lon"])}
+    except Exception as ex:
+        logger.warning("Nominatim geocoding error for '%s': %s", location, ex)
+    return None
 
 
 def _parse_event(e: dict) -> dict | None:
