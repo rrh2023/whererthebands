@@ -71,7 +71,7 @@ export default function Dashboard({ user, onSessionExpired }) {
     }
     };
     loadSaved();
-  }, []);
+  }, [onSessionExpired]);
 
   const handleSearch = async ({ city, radius }) => {
     setLoading(true);
