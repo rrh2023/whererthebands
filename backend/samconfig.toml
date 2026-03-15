@@ -9,4 +9,4 @@ parameter_overrides = "Environment=\"dev\" CognitoUserPoolId=\"us-east-2_I2f6C9k
 image_repositories = []
 
 [default.global.parameters]
-region = "us-east-1"
+region = "us-east-2"

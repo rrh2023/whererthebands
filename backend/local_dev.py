@@ -1,162 +1,212 @@
-# backend/local_dev.py
+# backend/functions/get_events/handler.py
 """
-Local development server — mirrors the Lambda API without deploying to AWS.
-Run with:  uvicorn local_dev:app --reload --port 8000
-
-Simulates Cognito auth by accepting any Bearer token in format:
-  Authorization: Bearer dev-user-<your-user-id>
-e.g. "Bearer dev-user-alice" → userId = "alice"
-
-Set env vars in a .env file (python-dotenv loaded automatically):
-  TICKETMASTER_API_KEY=...
-  ANTHROPIC_API_KEY=...
-  AWS_DEFAULT_REGION=us-east-1
-  AWS_ACCESS_KEY_ID=...       ← for DynamoDB access (or use aws sso login)
-  AWS_SECRET_ACCESS_KEY=...
+Lambda: GET /events
+Fetches upcoming music events from Ticketmaster near a given city/location.
+Requires: TICKETMASTER_API_KEY env var
+Auth: Cognito JWT via API Gateway authorizer
 """
 
 import json
 import os
-import sys
+import logging
+from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-load_dotenv()
+import requests
 
-# Add each function to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "functions/get_events"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "functions/get_recommendations"))
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "functions/user_profile"))
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-from fastapi import FastAPI, Request, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+TICKETMASTER_BASE = "https://app.ticketmaster.com/discovery/v2/events.json"
+NOMINATIM_BASE    = "https://nominatim.openstreetmap.org/search"
 
-import handler as events_handler
-import handler as recs_handler
-import handler as profile_handler
-
-# Re-import properly (avoid alias collision)
-import importlib.util
-
-def _load(name: str, path: str):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-_base = os.path.dirname(__file__) + "/functions"
-events_mod  = _load("events_handler",  f"{_base}/get_events/handler.py")
-recs_mod    = _load("recs_handler",    f"{_base}/get_recommendations/handler.py")
-profile_mod = _load("profile_handler", f"{_base}/user_profile/handler.py")
-
-app = FastAPI(title="WhereRTheBands Local Dev", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": os.environ.get("ALLOWED_ORIGIN", "*"),
+    "Access-Control-Allow-Headers": "Authorization,Content-Type",
+    "Access-Control-Allow-Methods": "POST,OPTIONS",
+    "Content-Type": "application/json",
+}
 
 
-def _fake_lambda_event(
-    request: Request,
-    body: bytes,
-    path: str,
-    method: str,
-    authorization: str | None = None,
-    path_params: dict | None = None,
-) -> dict:
-    """Build a dict that looks like what API Gateway passes to Lambda."""
-    # Parse dev token: "Bearer dev-user-alice" → sub = "alice"
-    sub = "dev-user-001"
-    if authorization and authorization.startswith("Bearer dev-user-"):
-        sub = authorization.split("Bearer dev-user-")[-1]
+def handler(event, context):
+    # Handle CORS preflight
+    if event.get("httpMethod") == "OPTIONS":
+        return {"statusCode": 200, "headers": CORS_HEADERS, "body": ""}
 
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        return error_response(400, "Invalid JSON body")
+
+    location = body.get("location", "").strip()
+    radius   = int(body.get("radius", 25))
+    size     = min(int(body.get("size", 20)), 50)  # cap at 50
+
+    if not location:
+        return error_response(400, "Missing required field: location")
+
+    api_key = os.environ.get("TICKETMASTER_API_KEY")
+    if not api_key:
+        logger.error("TICKETMASTER_API_KEY not set")
+        return error_response(500, "Server configuration error")
+
+    # Geocode the location to lat/lng so radius search works for
+    # small cities, suburbs, and zip codes (Ticketmaster city= is exact-match only)
+    coords = _geocode(location)
+
+    params = {
+        "apikey":             api_key,
+        "radius":             radius,
+        "unit":               "miles",
+        "classificationName": "music",
+        "size":               size,
+        "sort":               "date,asc",
+        "countryCode":        "US",
+    }
+
+    if coords:
+        # geoPoint gives radius-based search from coordinates — most reliable
+        params["geoPoint"] = f"{coords['lat']},{coords['lng']}"
+        logger.info("Geocoded '%s' → %s", location, params["geoPoint"])
+    else:
+        # Fall back to Ticketmaster's own city/zip matching
+        logger.warning("Geocoding failed for '%s', falling back to direct lookup", location)
+        if location.replace("-", "").isdigit():
+            params["postalCode"] = location
+        else:
+            params["city"] = location
+
+    # Only pull future events (Ticketmaster default includes past sometimes)
+    params["startDateTime"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    logger.info("Fetching events: %s", params)
+
+    try:
+        resp = requests.get(TICKETMASTER_BASE, params=params, timeout=10)
+        resp.raise_for_status()
+    except requests.Timeout:
+        return error_response(504, "Ticketmaster API timed out")
+    except requests.HTTPError as e:
+        logger.error("Ticketmaster HTTP error: %s", e)
+        return error_response(502, "Upstream events API error")
+    except requests.RequestException as e:
+        logger.error("Ticketmaster request failed: %s", e)
+        return error_response(502, "Failed to reach events API")
+
+    data = resp.json()
+    raw_events = data.get("_embedded", {}).get("events", [])
+
+    if not raw_events:
+        logger.info("No events found for location: %s", location)
+        return success_response([])
+
+    cleaned = [_parse_event(e) for e in raw_events]
+    # Filter out any events that failed parsing
+    cleaned = [e for e in cleaned if e is not None]
+
+    logger.info("Returning %d events for '%s'", len(cleaned), location)
+    return success_response(cleaned)
+
+
+def _geocode(location: str) -> dict | None:
+    """
+    Convert a city name or zip code to lat/lng using OpenStreetMap Nominatim.
+    Returns {"lat": float, "lng": float} or None on failure.
+    """
+    is_zip = location.replace("-", "").isdigit()
+    params = {
+        "q":              location if not is_zip else f"{location}, USA",
+        "format":         "json",
+        "addressdetails": 0,
+        "limit":          1,
+        "countrycodes":   "us",
+    }
+    try:
+        resp = requests.get(
+            NOMINATIM_BASE,
+            params=params,
+            timeout=5,
+            headers={"User-Agent": "WhereRTheBands/1.0"},
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if results:
+            return {"lat": float(results[0]["lat"]), "lng": float(results[0]["lon"])}
+    except Exception as ex:
+        logger.warning("Nominatim geocoding error for '%s': %s", location, ex)
+    return None
+
+
+def _parse_event(e: dict) -> dict | None:
+    """Normalize a raw Ticketmaster event into our app's shape."""
+    try:
+        embedded    = e.get("_embedded", {})
+        venues      = embedded.get("venues", [{}])
+        attractions = embedded.get("attractions", [])
+        images      = e.get("images", [])
+        dates       = e.get("dates", {})
+        start       = dates.get("start", {})
+        price_range = e.get("priceRanges", [{}])[0] if e.get("priceRanges") else {}
+
+        # Best image: prefer 16:9 ratio at ~640px width
+        best_image = _pick_image(images)
+
+        # Genre + subgenre
+        classifications = e.get("classifications", [{}])
+        genre    = classifications[0].get("genre", {}).get("name", "Music")
+        subgenre = classifications[0].get("subGenre", {}).get("name", "")
+
+        venue = venues[0] if venues else {}
+        city  = venue.get("city", {}).get("name", "")
+        state = venue.get("state", {}).get("stateCode", "")
+
+        return {
+            "id":          e.get("id"),
+            "name":        e.get("name", "Unknown Event"),
+            "date":        start.get("localDate"),
+            "time":        start.get("localTime"),
+            "dateTbd":     start.get("dateTBD", False),
+            "timeTbd":     start.get("timeTBD", False),
+            "venue":       venue.get("name", "Unknown Venue"),
+            "city":        f"{city}, {state}" if city and state else city,
+            "genre":       genre if genre != "Undefined" else "Music",
+            "subgenre":    subgenre if subgenre not in ("Undefined", "") else None,
+            "image":       best_image,
+            "url":         e.get("url"),
+            "artists":     [a.get("name") for a in attractions if a.get("name")],
+            "minPrice":    price_range.get("min"),
+            "maxPrice":    price_range.get("max"),
+            "currency":    price_range.get("currency", "USD"),
+            "status":      dates.get("status", {}).get("code", "onsale"),
+        }
+    except Exception as ex:
+        logger.warning("Failed to parse event %s: %s", e.get("id"), ex)
+        return None
+
+
+def _pick_image(images: list) -> str | None:
+    """Pick the best event image — prefer 16:9, ~640px wide."""
+    if not images:
+        return None
+    preferred = [
+        img for img in images
+        if img.get("ratio") == "16_9" and img.get("width", 0) >= 640
+    ]
+    fallback = [img for img in images if img.get("ratio") == "16_9"]
+    pool = preferred or fallback or images
+    return pool[0].get("url") if pool else None
+
+
+def success_response(data):
     return {
-        "httpMethod": method,
-        "path": path,
-        "pathParameters": path_params or {},
-        "headers": dict(request.headers),
-        "body": body.decode() if body else "{}",
-        "requestContext": {
-            "authorizer": {
-                "claims": {
-                    "sub": sub,
-                    "email": f"{sub}@dev.local",
-                }
-            }
-        },
+        "statusCode": 200,
+        "headers": CORS_HEADERS,
+        "body": json.dumps(data),
     }
 
 
-def _lambda_to_response(result: dict) -> JSONResponse:
-    body    = result.get("body", "{}")
-    status  = result.get("statusCode", 200)
-    parsed  = json.loads(body) if isinstance(body, str) else body
-    return JSONResponse(content=parsed, status_code=status)
-
-
-# ── Routes ──────────────────────────────────────────────────────────────────
-
-@app.post("/events")
-async def get_events(request: Request, authorization: str = Header(None)):
-    body  = await request.body()
-    event = _fake_lambda_event(request, body, "/events", "POST", authorization)
-    return _lambda_to_response(events_mod.handler(event, {}))
-
-
-@app.post("/recommendations")
-async def get_recommendations(request: Request, authorization: str = Header(None)):
-    body  = await request.body()
-    event = _fake_lambda_event(request, body, "/recommendations", "POST", authorization)
-    return _lambda_to_response(recs_mod.handler(event, {}))
-
-
-@app.get("/profile")
-async def get_profile(request: Request, authorization: str = Header(None)):
-    event = _fake_lambda_event(request, b"", "/profile", "GET", authorization)
-    return _lambda_to_response(profile_mod.handler(event, {}))
-
-
-@app.put("/profile")
-async def put_profile(request: Request, authorization: str = Header(None)):
-    body  = await request.body()
-    event = _fake_lambda_event(request, body, "/profile", "PUT", authorization)
-    return _lambda_to_response(profile_mod.handler(event, {}))
-
-
-@app.patch("/profile")
-async def patch_profile(request: Request, authorization: str = Header(None)):
-    body  = await request.body()
-    event = _fake_lambda_event(request, body, "/profile", "PATCH", authorization)
-    return _lambda_to_response(profile_mod.handler(event, {}))
-
-
-@app.post("/profile/saved")
-async def save_show(request: Request, authorization: str = Header(None)):
-    body  = await request.body()
-    event = _fake_lambda_event(request, body, "/profile/saved", "POST", authorization)
-    return _lambda_to_response(profile_mod.handler(event, {}))
-
-
-@app.delete("/profile/saved/{event_id}")
-async def unsave_show(event_id: str, request: Request, authorization: str = Header(None)):
-    event = _fake_lambda_event(
-        request, b"",
-        f"/profile/saved/{event_id}", "DELETE",
-        authorization,
-        path_params={"eventId": event_id}
-    )
-    return _lambda_to_response(profile_mod.handler(event, {}))
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok", "env": os.environ.get("ENVIRONMENT", "local")}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("local_dev:app", host="0.0.0.0", port=8000, reload=True)
+def error_response(status: int, message: str):
+    return {
+        "statusCode": status,
+        "headers": CORS_HEADERS,
+        "body": json.dumps({"error": message}),
+    }

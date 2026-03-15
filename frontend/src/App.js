@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useState, useEffect } from "react";
-import { getCurrentUser } from "./services/cognito";
+import { getCurrentUser, signOut } from "./services/cognito";
 import { getProfile } from "./services/api";
 import Navbar from "./components/shared/Navbar";
 import Login from "./components/Auth/Login";
@@ -104,7 +104,12 @@ export default function App() {
     setScreen("dashboard");
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch {
+      // If signOut fails, clear local state anyway
+    }
     setUser(null);
     setScreen("login");
   };
