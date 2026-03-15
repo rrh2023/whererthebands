@@ -1,9 +1,8 @@
 // src/components/Dashboard/ConcertCard.jsx
 import { useState } from "react";
 
-export default function ConcertCard({ event, recommendation, index }) {
+export default function ConcertCard({ event, recommendation, index, isSaved, onSaveToggle }) {
   const [flipped, setFlipped] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   if (!event || !event.date) return null;
 
@@ -11,24 +10,22 @@ export default function ConcertCard({ event, recommendation, index }) {
   const scoreColor =
     score >= 9 ? "var(--cyan)" : score >= 7 ? "var(--gold)" : "var(--muted)";
 
-  const vibeTags = recommendation?.vibe_tags ?? [];
+  const vibeTags    = recommendation?.vibe_tags ?? [];
   const explanation = recommendation?.explanation ?? null;
 
   const dateObj = event.date ? new Date(event.date + "T00:00:00") : null;
-  const month = dateObj
-    ? dateObj.toLocaleString("en-US", { month: "short" }).toUpperCase()
-    : "—";
-  const day = dateObj ? dateObj.getDate() : "—";
-  const weekday = dateObj
-    ? dateObj.toLocaleString("en-US", { weekday: "short" }).toUpperCase()
-    : "";
+  const month   = dateObj ? dateObj.toLocaleString("en-US", { month: "short" }).toUpperCase() : "—";
+  const day     = dateObj ? dateObj.getDate() : "—";
+  const weekday = dateObj ? dateObj.toLocaleString("en-US", { weekday: "short" }).toUpperCase() : "";
+
+  const handleSave = (e) => {
+    e.stopPropagation();
+    onSaveToggle?.(event);
+  };
 
   return (
     <div
-      style={{
-        animationDelay: `${index * 80}ms`,
-        perspective: "1000px",
-      }}
+      style={{ animationDelay: `${index * 80}ms`, perspective: "1000px" }}
       className="animate-fadeUp"
     >
       <div
@@ -86,15 +83,10 @@ export default function ConcertCard({ event, recommendation, index }) {
                   gap: "2px",
                 }}
               >
-                <span
-                  className="font-display"
-                  style={{ fontSize: "1.4rem", color: scoreColor, lineHeight: 1 }}
-                >
+                <span className="font-display" style={{ fontSize: "1.4rem", color: scoreColor, lineHeight: 1 }}>
                   {score}
                 </span>
-                <span style={{ fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>
-                  /10
-                </span>
+                <span style={{ fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>/10</span>
               </div>
             )}
             {/* Genre tag */}
@@ -119,15 +111,7 @@ export default function ConcertCard({ event, recommendation, index }) {
           </div>
 
           {/* Content */}
-          <div
-            style={{
-              padding: "14px 16px",
-              flex: 1,
-              display: "flex",
-              gap: "14px",
-              overflow: "hidden",
-            }}
-          >
+          <div style={{ padding: "14px 16px", flex: 1, display: "flex", gap: "14px", overflow: "hidden" }}>
             {/* Date column */}
             <div
               style={{
@@ -142,9 +126,7 @@ export default function ConcertCard({ event, recommendation, index }) {
               }}
             >
               <span style={{ fontSize: "0.55rem", color: "var(--gold)", letterSpacing: "0.15em" }}>{month}</span>
-              <span className="font-display" style={{ fontSize: "1.8rem", lineHeight: 1, color: "#fff" }}>
-                {day}
-              </span>
+              <span className="font-display" style={{ fontSize: "1.8rem", lineHeight: 1, color: "#fff" }}>{day}</span>
               <span style={{ fontSize: "0.5rem", color: "var(--muted)", letterSpacing: "0.1em" }}>{weekday}</span>
             </div>
 
@@ -203,11 +185,11 @@ export default function ConcertCard({ event, recommendation, index }) {
               letterSpacing: "0.1em",
             }}
           >
-            TAP FOR WHY →
+            TAP FOR INFO →
           </div>
         </div>
 
-        {/* ── BACK (AI explanation) ── */}
+        {/* ── BACK ── */}
         <div
           style={{
             position: "absolute",
@@ -216,7 +198,7 @@ export default function ConcertCard({ event, recommendation, index }) {
             WebkitBackfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
             background: "#0f0f0f",
-            border: "1px solid var(--gold)",
+            border: `1px solid ${explanation ? "var(--gold)" : "var(--border)"}`,
             padding: "20px",
             display: "flex",
             flexDirection: "column",
@@ -224,32 +206,53 @@ export default function ConcertCard({ event, recommendation, index }) {
           }}
         >
           <div>
-            <div
-              style={{
-                fontSize: "0.55rem",
-                letterSpacing: "0.25em",
-                color: "var(--gold)",
-                textTransform: "uppercase",
-                marginBottom: "10px",
-              }}
-            >
-              ◆ Claude says
-            </div>
-            <p
-              style={{
-                color: "var(--text)",
-                fontSize: "0.78rem",
-                lineHeight: 1.75,
-                fontStyle: "italic",
-              }}
-            >
-              {explanation ?? "No AI explanation available for this show."}
-            </p>
+            {explanation ? (
+              <>
+                <div
+                  style={{
+                    fontSize: "0.55rem",
+                    letterSpacing: "0.25em",
+                    color: "var(--gold)",
+                    textTransform: "uppercase",
+                    marginBottom: "10px",
+                  }}
+                >
+                  ◆ Claude says
+                </div>
+                <p style={{ color: "var(--text)", fontSize: "0.78rem", lineHeight: 1.75, fontStyle: "italic" }}>
+                  {explanation}
+                </p>
+              </>
+            ) : (
+              <>
+                <div
+                  style={{
+                    fontSize: "0.55rem",
+                    letterSpacing: "0.25em",
+                    color: "var(--muted)",
+                    textTransform: "uppercase",
+                    marginBottom: "10px",
+                  }}
+                >
+                  ◆ Show Info
+                </div>
+                <p style={{ color: "var(--muted)", fontSize: "0.75rem", lineHeight: 1.75 }}>
+                  {event.artists?.length > 0
+                    ? `Featuring: ${event.artists.join(", ")}`
+                    : event.name}
+                </p>
+                {event.minPrice && (
+                  <p style={{ color: "var(--gold)", fontSize: "0.7rem", marginTop: "10px" }}>
+                    From ${event.minPrice} {event.currency ?? "USD"}
+                  </p>
+                )}
+              </>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
             <a
-              href={event.url || '#'}
+              href={event.url || "#"}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
@@ -268,18 +271,18 @@ export default function ConcertCard({ event, recommendation, index }) {
               GET TICKETS →
             </a>
             <button
-              onClick={(e) => { e.stopPropagation(); setSaved((s) => !s); }}
+              onClick={handleSave}
               style={{
-                background: saved ? "rgba(0,229,204,0.15)" : "transparent",
-                border: `1px solid ${saved ? "var(--cyan)" : "var(--border)"}`,
-                color: saved ? "var(--cyan)" : "var(--muted)",
+                background: isSaved ? "rgba(0,229,204,0.15)" : "transparent",
+                border: `1px solid ${isSaved ? "var(--cyan)" : "var(--border)"}`,
+                color: isSaved ? "var(--cyan)" : "var(--muted)",
                 padding: "10px 14px",
                 cursor: "pointer",
                 fontSize: "0.9rem",
                 transition: "all 0.2s",
               }}
             >
-              {saved ? "♥" : "♡"}
+              {isSaved ? "♥" : "♡"}
             </button>
           </div>
         </div>
